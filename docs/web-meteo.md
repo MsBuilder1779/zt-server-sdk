@@ -1,67 +1,69 @@
-# Web Meteo
+# Web Meteo API
 
-Документация по использованию Web Meteo через **ZT Server SDK**.
+Этот файл описывает только работу с **Web Meteo** через `ZT Server SDK`.
 
-Файл предназначен для разработчиков Android-приложений, которые подключают готовый SDK в виде `.aar` и используют Web Meteo для получения метеоданных.
+Общее подключение `.aar`, зависимости Gradle и базовая инициализация SDK описываются в основном `README.md`. Здесь — только конкретная функция Web Meteo и готовый код использования.
 
-## Назначение
+---
 
-Web Meteo позволяет приложению получать метеоданные по выбранной точке через серверную экосистему ZEvS.
+## Что делает Web Meteo
 
-SDK берёт на себя сетевое взаимодействие, подготовку запроса, обработку ответа и обработку типовых ошибок. Приложению не нужно вручную собирать серверные запросы или передавать служебные параметры SDK.
+Web Meteo получает метеоданные по точке:
 
-## Возможности
+- широта;
+- долгота;
+- высота;
+- тип результата;
+- время прогноза, если нужно.
 
-Web Meteo через SDK поддерживает:
+Web Meteo работает отдельно от обычной авторизации приложения. Для него используется отдельный `webMeteoToken`.
 
-- получение метеоданных по координатам точки;
-- передачу высоты точки;
-- выбор типа запрашиваемых данных;
-- запрос данных на конкретное время, если это поддерживается текущей версией SDK;
-- обработку успешного результата;
-- обработку ошибок сети;
-- обработку ошибок доступа;
-- обработку ошибок конфигурации;
-- отдельную работу Web Meteo доступа от обычной авторизации приложения.
+---
 
-## Подключение SDK
+## Публичный API
 
-Скопируйте AAR-файл SDK в приложение:
-
-```text
-app/libs/zt-server-sdk-0.2.0.aar
-```
-
-Добавьте зависимость в `app/build.gradle`:
-
-```gradle
-dependencies {
-    implementation files("libs/zt-server-sdk-0.2.0.aar")
-
-    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0"
-    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3"
-    implementation "com.squareup.okhttp3:okhttp:4.12.0"
-}
-```
-
-Если эти зависимости уже подключены в проекте, повторно добавлять их не нужно.
-
-## Разрешение на интернет
-
-Добавьте разрешение в `AndroidManifest.xml`:
-
-```xml
-<uses-permission android:name="android.permission.INTERNET" />
-```
-
-## Инициализация SDK
-
-SDK нужно инициализировать один раз при запуске приложения.
-
-Пример:
+Основная точка входа:
 
 ```kotlin
-import com.zevsecosystem.serversdk.ZevsSdk
+ZevsSdk.webMeteo
+```
+
+Основные методы:
+
+```kotlin
+ZevsSdk.webMeteo.getForecast(...)
+ZevsSdk.webMeteo.getForecastRaw(...)
+ZevsSdk.webMeteo.setToken(...)
+```
+
+---
+
+## Типы результата
+
+Для `type` используется `WebMeteoOutputType`:
+
+```kotlin
+WebMeteoOutputType.METEO
+WebMeteoOutputType.METEO_FULL
+WebMeteoOutputType.HEIGHT
+WebMeteoOutputType.HEIGHT_FULL
+```
+
+Соответствие:
+
+| SDK type | Назначение |
+|---|---|
+| `METEO` | обычный метео-ответ |
+| `METEO_FULL` | расширенный метео-ответ |
+| `HEIGHT` | данные по высоте |
+| `HEIGHT_FULL` | расширенные данные по высоте |
+
+---
+
+## Вариант 1. Token передаётся при инициализации SDK
+
+```kotlin
+import com.zevsecosystem.serversdk.core.ZevsSdk
 import com.zevsecosystem.serversdk.core.ZevsSdkConfig
 
 ZevsSdk.init(
@@ -69,167 +71,303 @@ ZevsSdk.init(
     config = ZevsSdkConfig(
         baseUrl = "https://zevs-team.ru",
         appVersionCode = BuildConfig.VERSION_CODE,
-        appVersionName = BuildConfig.VERSION_NAME
+        appVersionName = BuildConfig.VERSION_NAME,
+        webMeteoToken = "WEB_METEO_TOKEN"
     )
 )
 ```
 
-## Web Meteo token
+Используйте этот вариант, если Web Meteo token известен уже при старте приложения.
 
-Для Web Meteo используется отдельный Web Meteo token.
+---
 
-Используйте его только через публичный механизм SDK, предназначенный для Web Meteo.
+## Вариант 2. Token задаётся позже
 
-Не используйте Web Meteo token как обычный токен авторизации приложения.
+```kotlin
+ZevsSdk.webMeteo.setToken("WEB_METEO_TOKEN")
+```
 
-Не передавайте Web Meteo token вручную в сетевые заголовки.
+Используйте этот вариант, если token приходит позже: после входа пользователя, после загрузки настроек, после QR-кода, из защищённого хранилища и так далее.
 
-Не смешивайте Web Meteo доступ с обычной регистрацией и авторизацией приложения.
+Чтобы сбросить token:
 
-## Типовой сценарий использования
+```kotlin
+ZevsSdk.webMeteo.setToken(null)
+```
 
-1. Приложение получает координаты точки.
-2. Приложение получает или задаёт высоту точки.
-3. Приложение выбирает нужный тип метеоданных.
-4. Приложение передаёт Web Meteo token через публичный механизм SDK.
-5. Приложение вызывает публичный метод SDK для получения метеоданных.
-6. Приложение показывает результат пользователю или выводит понятную ошибку.
+---
 
-## Входные данные
+## Готовая реализация для приложения
 
-Обычно для запроса нужны:
+Создайте файл в приложении:
 
 ```text
-latitude   — широта
-longitude  — долгота
-height     — высота точки в метрах
-type       — тип запрашиваемого результата
-time       — время прогноза, если требуется и поддерживается SDK
+app/src/main/java/<your/package>/webmeteo/WebMeteoSdkRepository.kt
 ```
 
-Пример точки:
+Код файла:
 
-```text
-latitude: 55.75
-longitude: 37.61
-height: 180.0
+```kotlin
+package your.package.webmeteo
+
+import com.zevsecosystem.serversdk.core.ZevsSdk
+import com.zevsecosystem.serversdk.network.ZevsResult
+import com.zevsecosystem.serversdk.webmeteo.WebMeteoForecastRequest
+import com.zevsecosystem.serversdk.webmeteo.WebMeteoForecastResponse
+import com.zevsecosystem.serversdk.webmeteo.WebMeteoOutputType
+import kotlinx.serialization.json.JsonObject
+
+class WebMeteoSdkRepository {
+
+    fun setWebMeteoToken(token: String?) {
+        ZevsSdk.webMeteo.setToken(token)
+    }
+
+    suspend fun getMeteo(
+        latitude: Double,
+        longitude: Double,
+        heightMeters: Double,
+        requestTimeUnixSeconds: Long? = null,
+        type: WebMeteoOutputType = WebMeteoOutputType.METEO,
+    ): WebMeteoResult {
+        if (!latitude.isFinite() || latitude !in -90.0..90.0) {
+            return WebMeteoResult.Error("Некорректная широта")
+        }
+
+        if (!longitude.isFinite() || longitude !in -180.0..180.0) {
+            return WebMeteoResult.Error("Некорректная долгота")
+        }
+
+        if (!heightMeters.isFinite()) {
+            return WebMeteoResult.Error("Некорректная высота")
+        }
+
+        val result = ZevsSdk.webMeteo.getForecast(
+            lat = latitude,
+            lon = longitude,
+            height = heightMeters,
+            requestTime = requestTimeUnixSeconds,
+            type = type,
+        )
+
+        return when (result) {
+            is ZevsResult.Success -> WebMeteoResult.Success(result.data)
+            is ZevsResult.Error -> WebMeteoResult.Error(mapWebMeteoError(result.error.toString()))
+        }
+    }
+
+    suspend fun getMeteoRaw(
+        latitude: Double,
+        longitude: Double,
+        heightMeters: Double,
+        requestTimeUnixSeconds: Long? = null,
+        type: WebMeteoOutputType = WebMeteoOutputType.METEO,
+    ): ZevsResult<JsonObject> {
+        val request = WebMeteoForecastRequest(
+            lat = latitude,
+            lon = longitude,
+            height = heightMeters,
+            requestTime = requestTimeUnixSeconds,
+            type = type,
+        )
+
+        return ZevsSdk.webMeteo.getForecastRaw(request)
+    }
+
+    private fun mapWebMeteoError(error: String): String {
+        return when {
+            error.contains("WEB_METEO_TOKEN_REQUIRED", ignoreCase = true) ->
+                "Web Meteo token не задан"
+
+            error.contains("UNAUTHORIZED", ignoreCase = true) ||
+            error.contains("FORBIDDEN", ignoreCase = true) ->
+                "Нет доступа к Web Meteo"
+
+            error.contains("NETWORK", ignoreCase = true) ||
+            error.contains("TIMEOUT", ignoreCase = true) ->
+                "Ошибка сети при получении метеоданных"
+
+            error.contains("PARSE", ignoreCase = true) ->
+                "Ошибка обработки ответа Web Meteo"
+
+            else ->
+                "Не удалось получить метеоданные"
+        }
+    }
+}
+
+sealed class WebMeteoResult {
+    data class Success(val forecast: WebMeteoForecastResponse) : WebMeteoResult()
+    data class Error(val message: String) : WebMeteoResult()
+}
 ```
 
-## Координаты
+---
 
-Координаты передаются в десятичном формате.
+## Пример вызова из ViewModel
 
-Пример:
+```kotlin
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.zevsecosystem.serversdk.webmeteo.WebMeteoOutputType
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import your.package.webmeteo.WebMeteoResult
+import your.package.webmeteo.WebMeteoSdkRepository
 
-```text
-55.750000
-37.610000
+class MeteoViewModel(
+    private val webMeteoRepository: WebMeteoSdkRepository = WebMeteoSdkRepository(),
+) : ViewModel() {
+
+    private val _state = MutableStateFlow<MeteoUiState>(MeteoUiState.Idle)
+    val state: StateFlow<MeteoUiState> = _state
+
+    fun setWebMeteoToken(token: String) {
+        webMeteoRepository.setWebMeteoToken(token)
+    }
+
+    fun loadMeteo(
+        latitude: Double,
+        longitude: Double,
+        heightMeters: Double,
+        requestTimeUnixSeconds: Long? = null,
+    ) {
+        viewModelScope.launch {
+            _state.value = MeteoUiState.Loading
+
+            val result = webMeteoRepository.getMeteo(
+                latitude = latitude,
+                longitude = longitude,
+                heightMeters = heightMeters,
+                requestTimeUnixSeconds = requestTimeUnixSeconds,
+                type = WebMeteoOutputType.METEO,
+            )
+
+            _state.value = when (result) {
+                is WebMeteoResult.Success -> MeteoUiState.Success(result.forecast)
+                is WebMeteoResult.Error -> MeteoUiState.Error(result.message)
+            }
+        }
+    }
+}
 ```
 
-Не передавайте координаты в формате градусов, минут и секунд, если приложение предварительно не преобразовало их в десятичный формат.
+---
 
-## Высота
+## UI state для примера
 
-Высота передаётся в метрах.
+```kotlin
+import com.zevsecosystem.serversdk.webmeteo.WebMeteoForecastResponse
 
-Если высота неизвестна, приложение должно использовать своё штатное поведение:
-
-- запросить высоту у пользователя;
-- взять высоту из сохранённой точки;
-- использовать допустимое значение по умолчанию, если это предусмотрено логикой приложения.
-
-## Время прогноза
-
-Если приложению нужен прогноз на конкретное время, используйте публичный параметр SDK для времени.
-
-Не формируйте серверный URL вручную.
-
-Не добавляйте параметры времени вручную в строку запроса, если SDK предоставляет для этого отдельный параметр.
-
-## Обработка результата
-
-Приложение должно разделять:
-
-- успешный ответ;
-- ошибку сети;
-- ошибку доступа;
-- ошибку конфигурации;
-- ошибку некорректных входных данных;
-- ошибку обработки ответа.
-
-Пользователю лучше показывать понятный текст, а не техническую ошибку.
-
-Примеры сообщений:
-
-```text
-Нет подключения к интернету.
-Не удалось получить метеоданные.
-Проверьте координаты точки.
-Сервис временно недоступен.
-Доступ к Web Meteo не настроен.
+sealed class MeteoUiState {
+    data object Idle : MeteoUiState()
+    data object Loading : MeteoUiState()
+    data class Success(val forecast: WebMeteoForecastResponse) : MeteoUiState()
+    data class Error(val message: String) : MeteoUiState()
+}
 ```
 
-## Что приложение не должно делать
+---
 
-Приложение не должно вручную передавать:
+## Пример чтения ответа
 
-- идентификатор устройства;
-- ключ приложения;
-- access token;
-- refresh token;
-- служебные заголовки авторизации;
-- внутренние параметры SDK.
+`WebMeteoForecastResponse` содержит основные поля ответа и карты данных:
 
-SDK управляет этими данными самостоятельно.
+```kotlin
+val forecast = result.forecast
 
-## Что не нужно раскрывать пользователю
+val latitude = forecast.latitude
+val longitude = forecast.longitude
+val altitude = forecast.altitude
+val generationTimeMs = forecast.generationTimeMs
 
-В интерфейсе приложения не нужно показывать:
-
-- внутренние технические данные запроса;
-- служебные токены;
-- служебные ключи;
-- внутренние ошибки SDK;
-- внутренние параметры сервера.
-
-Пользователю должны отображаться только понятные статусы и результат прогноза.
-
-## Проверка подключения
-
-После подключения SDK выполните сборку приложения.
-
-PowerShell:
-
-```powershell
-./gradlew assembleDebug
+val current = forecast.current
+val hourly = forecast.hourly
 ```
 
-CMD:
+`current` и `hourly` — это карты значений, потому что набор метеополей может отличаться в зависимости от типа запроса и ответа сервера.
 
-```bat
-gradlew.bat assembleDebug
+Пример безопасного чтения:
+
+```kotlin
+val temperatureList = forecast.current["temperature_2m"]
+val firstTemperature = temperatureList?.firstOrNull()?.toString()
 ```
 
-Если приложение собирается без ошибок, SDK подключён корректно.
+---
 
-## Минимальный чек-лист
+## Запрос на конкретное время
 
-Перед использованием Web Meteo проверьте:
+Если нужен прогноз на конкретное время, передайте Unix timestamp:
 
-- файл SDK лежит в `app/libs`;
-- зависимость `implementation files(...)` добавлена;
-- зависимости Coroutines, Serialization и OkHttp доступны;
-- разрешение `INTERNET` добавлено;
-- SDK инициализирован при старте приложения;
-- Web Meteo token передаётся через публичный механизм SDK;
-- координаты точки корректны;
-- высота точки корректна;
-- приложение обрабатывает ошибки.
+```kotlin
+val result = webMeteoRepository.getMeteo(
+    latitude = 55.75,
+    longitude = 37.61,
+    heightMeters = 180.0,
+    requestTimeUnixSeconds = 1767225600L,
+    type = WebMeteoOutputType.METEO,
+)
+```
 
-## Безопасность
+Если время не нужно, передайте `null` или не указывайте параметр.
 
-Репозиторий содержит только готовый AAR-файл SDK.
+---
 
-Основная проверка доступа, прав, ограничений и корректности запроса выполняется на стороне сервера.
+## Когда использовать getForecastRaw
 
-Для подключения и использования Web Meteo не требуется раскрывать внутреннюю реализацию SDK или серверные детали.
+Используйте `getForecastRaw`, если нужно получить сырой JSON-ответ без привязки к `WebMeteoForecastResponse`.
+
+```kotlin
+val rawResult = webMeteoRepository.getMeteoRaw(
+    latitude = 55.75,
+    longitude = 37.61,
+    heightMeters = 180.0,
+    type = WebMeteoOutputType.METEO_FULL,
+)
+```
+
+Обычному приложению чаще нужен `getForecast`, а не `getForecastRaw`.
+
+---
+
+## Важные правила
+
+1. Не собирайте URL Web Meteo вручную.
+2. Не добавляйте Web Meteo token вручную в headers.
+3. Не используйте `Authorization` для Web Meteo.
+4. Не смешивайте Web Meteo token с обычными access / refresh токенами приложения.
+5. Не логируйте Web Meteo token.
+6. Не показывайте пользователю технический текст ошибки напрямую.
+7. Проверяйте координаты и высоту до вызова SDK.
+8. Для UI используйте свои понятные сообщения об ошибках.
+
+---
+
+## Минимальный рабочий сценарий
+
+```kotlin
+ZevsSdk.webMeteo.setToken("WEB_METEO_TOKEN")
+
+val repository = WebMeteoSdkRepository()
+
+val result = repository.getMeteo(
+    latitude = 55.75,
+    longitude = 37.61,
+    heightMeters = 180.0,
+    type = WebMeteoOutputType.METEO,
+)
+
+when (result) {
+    is WebMeteoResult.Success -> {
+        val forecast = result.forecast
+        // показать forecast в UI
+    }
+
+    is WebMeteoResult.Error -> {
+        val message = result.message
+        // показать message в UI
+    }
+}
+```
